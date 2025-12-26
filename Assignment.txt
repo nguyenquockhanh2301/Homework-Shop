@@ -1,0 +1,65 @@
+EXERCISE APPLYING DATA STRUCTURE TECHNIQUES
+Assignment:
+Build a web application to manage products and shopping carts using MVC architecture.
+Model 2 (Servlet + JSP + JavaBean + DAO), using MySQL as the database.
+Required:
+1. Products table in MySQL with the following columns:
+○ id (INT, PK, AUTO_INCREMENT)
+○ name (VARCHAR)
+○ price (DECIMAL)
+○ description (TEXT)
+2. Create Models:
+○ Product (JavaBean)
+○ ProductDAO (JDBC) with full CRUD support.
+
+3. Improve DAO layer performance:
+○ Use the ConcurrentHashMap<Integer,
+Product> data structure to cache products by ID.
+
+○ Clearly describe when to read from the cache, when to read from the database, and when to update the cache.
+
+4. Controller:
+○ ProductServlet handles all /products requests with actions:
+list, new, edit, delete, save (or equivalent).
+
+○ The Servlet calls the DAO (Model), then forwards it to the JSP (View).
+
+5. View (JSP):
+○ product-list.jsp: displays a list of products, with Add/Edit/Delete links and an “Add to Cart” button.
+
+○ product-form.jsp: a general form for adding/editing products.
+
+○ The JSP uses JSTL + EL, not scriptlets.
+
+6. Cart:
+○ Creates a CartItem (Product + quantity) and stores the Cart in the session.
+
+○ The cart must use Map<Integer, CartItem> to manage
+
+products by productId, explaining the reason for choosing Map instead of List.
+
+○ Create a CartServlet to:
+■ Add products to the cart
+■ Update the quantity
+■ Remove a product
+■ Clear the entire cart
+■ View the cart
+○ Create a cart.jsp file to display the list of items, total quantity, total price, and update/delete buttons.
+
+7. Analysis (write in comments):
+○ Explain why you are using:
+■ ConcurrentHashMap for product caching
+■ LinkedHashMap / Map for the shopping cart
+■ ArrayList for the returned list
+○ Analyze the time complexity (Big-O) for some typical operations:
+■ Search for products by cached ID
+■ Add products to the cart (addProduct)
+■ Update the quantity in the cart (updateQuantity)
+Learning Objectives:
+● Apply MVC 2 techniques in a real-world web application.
+
+● Know how to combine Data Structures (Map/List/ConcurrentHashMap…) to improve performance.
+
+● Know how to clearly separate Model – View – Controller, preventing JSPs from directly accessing the database.
+
+● Know how to use sessions to manage the shopping cart status.
