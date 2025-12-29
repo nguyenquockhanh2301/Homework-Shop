@@ -4,7 +4,7 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-    <title><c:choose><c:when test="${empty product.id}">Add Product</c:when><c:otherwise>Edit Product</c:otherwise></c:choose></title>
+    <title><c:choose><c:when test="${product.id <= 0}">Add Product</c:when><c:otherwise>Edit Product</c:otherwise></c:choose></title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; max-width: 600px; }
         .form-group { margin-bottom: 15px; }
@@ -16,18 +16,25 @@
         .btn-secondary { background-color: #808080; color: white; text-decoration: none; display: inline-block; }
         .error { color: red; padding: 10px; background-color: #ffe6e6; border: 1px solid red; margin-bottom: 15px; }
         .info { color: #555; font-size: 0.9em; margin-top: 5px; }
+        .img-preview { width: 140px; height: 140px; object-fit: cover; border: 1px solid #ccc; border-radius: 6px; background: #f9f9f9; }
+        .img-row { display: flex; align-items: center; gap: 12px; }
     </style>
 </head>
 <body>
-<h1><c:choose><c:when test="${empty product.id}">Add New Product</c:when><c:otherwise>Edit Product #${product.id}</c:otherwise></c:choose></h1>
+<c:if test="${sessionScope.currentUserRole ne 'ADMIN'}">
+    <p class="error">Only admins can manage products.</p>
+    <a href="${pageContext.request.contextPath}/products?action=list" class="btn btn-secondary">Back</a>
+</c:if>
+<c:if test="${sessionScope.currentUserRole eq 'ADMIN'}">
+<h1><c:choose><c:when test="${product.id <= 0}">Add New Product</c:when><c:otherwise>Edit Product #${product.id}</c:otherwise></c:choose></h1>
 
 <c:if test="${not empty error}">
     <div class="error">${error}</div>
 </c:if>
 
-<form method="post" action="${pageContext.request.contextPath}/products">
+<form method="post" action="${pageContext.request.contextPath}/products" enctype="multipart/form-data">
     <input type="hidden" name="action" value="save" />
-    <c:if test="${not empty product.id}">
+    <c:if test="${product.id > 0}">
         <input type="hidden" name="id" value="${product.id}" />
         <input type="hidden" name="version" value="${product.version}" />
     </c:if>
@@ -47,8 +54,27 @@
         <label for="description">Description</label>
         <textarea id="description" name="description">${product.description}</textarea>
     </div>
-    
-    <c:if test="${not empty product.version}">
+
+    <div class="form-group">
+        <label for="imageUrl">Image URL</label>
+        <input type="text" id="imageUrl" name="imageUrl" value="${product.imageUrl}" placeholder="https://example.com/image.jpg" />
+        <div class="info">Paste a direct image URL (jpg/png/webp) or upload below.</div>
+    </div>
+
+    <div class="form-group">
+        <label for="imageFile">Upload Image</label>
+        <input type="file" id="imageFile" name="imageFile" accept="image/jpeg,image/png,image/webp" />
+        <div class="info">Max 5 MB. If both upload and URL are provided, the upload is used.</div>
+    </div>
+
+    <div class="form-group img-row">
+        <div>
+            <div class="info">Preview</div>
+            <img src="${empty product.imageUrl ? 'https://via.placeholder.com/140?text=No+Image' : product.imageUrl}" alt="Preview" class="img-preview" onerror="this.src='https://via.placeholder.com/140?text=No+Image'" />
+        </div>
+    </div>
+
+    <c:if test="${product.id > 0}">
         <div class="info">Version: ${product.version} (optimistic locking enabled)</div>
     </c:if>
     
@@ -57,5 +83,6 @@
         <a href="${pageContext.request.contextPath}/products?action=list" class="btn btn-secondary">Cancel</a>
     </div>
 </form>
+</c:if>
 </body>
 </html>

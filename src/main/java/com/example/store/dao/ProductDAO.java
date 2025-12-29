@@ -4,6 +4,7 @@ import com.example.store.model.Product;
 import com.example.store.util.DBConnectionManager;
 import com.example.store.util.CacheManager;
 import com.example.store.util.OptimisticLockException;
+import com.example.store.util.DataIntegrityException;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -59,6 +60,7 @@ public class ProductDAO {
         p.setName(rs.getString("name"));
         p.setPrice(rs.getBigDecimal("price"));
         p.setDescription(rs.getString("description"));
+        p.setImageUrl(rs.getString("image_url"));
         p.setVersion(rs.getInt("version"));
         p.setCreatedAt(rs.getTimestamp("created_at"));
         p.setUpdatedAt(rs.getTimestamp("updated_at"));
@@ -70,7 +72,7 @@ public class ProductDAO {
      */
     public List<Product> findAll() {
         List<Product> list = new ArrayList<>();
-        String sql = "SELECT id,name,price,description,version,created_at,updated_at FROM products";
+        String sql = "SELECT id,name,price,description,image_url,version,created_at,updated_at FROM products";
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -92,7 +94,7 @@ public class ProductDAO {
         Product cached = cache.get(id);
         if (cached != null) return Optional.of(cached);
 
-        String sql = "SELECT id,name,price,description,version,created_at,updated_at FROM products WHERE id = ?";
+        String sql = "SELECT id,name,price,description,image_url,version,created_at,updated_at FROM products WHERE id = ?";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
@@ -113,11 +115,12 @@ public class ProductDAO {
      * Returns generated id.
      */
     public int create(Product product) {
-        String sql = "INSERT INTO products (name,price,description,version) VALUES (?,?,?,1)";
+        String sql = "INSERT INTO products (name,price,description,image_url,version) VALUES (?,?,?,?,1)";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, product.getName());
             ps.setBigDecimal(2, product.getPrice());
             ps.setString(3, product.getDescription());
+            ps.setString(4, product.getImageUrl());
             int updated = ps.executeUpdate();
             if (updated == 0) throw new RuntimeException("Insert failed, no rows affected");
             try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -141,13 +144,14 @@ public class ProductDAO {
      * On success updates cache and returns true. On version mismatch throws OptimisticLockException.
      */
     public boolean update(Product product, int expectedVersion) throws OptimisticLockException {
-        String sql = "UPDATE products SET name = ?, price = ?, description = ?, version = version + 1 WHERE id = ? AND version = ?";
+        String sql = "UPDATE products SET name = ?, price = ?, description = ?, image_url = ?, version = version + 1 WHERE id = ? AND version = ?";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, product.getName());
             ps.setBigDecimal(2, product.getPrice());
             ps.setString(3, product.getDescription());
-            ps.setInt(4, product.getId());
-            ps.setInt(5, expectedVersion);
+            ps.setString(4, product.getImageUrl());
+            ps.setInt(5, product.getId());
+            ps.setInt(6, expectedVersion);
             int affected = ps.executeUpdate();
             if (affected == 0) {
                 throw new OptimisticLockException("Update failed due to version mismatch for product id=" + product.getId());
@@ -176,6 +180,8 @@ public class ProductDAO {
                 return true;
             }
             return false;
+        } catch (java.sql.SQLIntegrityConstraintViolationException fk) {
+            throw new DataIntegrityException("Cannot delete product because it is referenced by one or more cart items.", fk);
         } catch (Exception e) {
             throw new RuntimeException("Error deleting product", e);
         }
@@ -187,7 +193,7 @@ public class ProductDAO {
      * Refresh full cache from DB (clears then repopulates).
      */
     public void refreshCache() {
-        String sql = "SELECT id,name,price,description,version,created_at,updated_at FROM products";
+        String sql = "SELECT id,name,price,description,image_url,version,created_at,updated_at FROM products";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             cache.clear();
             while (rs.next()) {

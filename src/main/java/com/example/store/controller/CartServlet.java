@@ -89,11 +89,22 @@ public class CartServlet extends HttpServlet {
     private Cart getOrCreateCart(HttpSession session) {
         Cart cart = (Cart) session.getAttribute("cart");
         Long cartId = (Long) session.getAttribute("cartId");
-        
+        Long userId = (Long) session.getAttribute("currentUserId");
+
         if (cart != null && cartId != null) {
             return cart;
         }
         
+        // Try loading by user_id first if logged in
+        if (userId != null) {
+            cart = cartDAO.loadCartByUserId(userId);
+            if (cart != null) {
+                session.setAttribute("cart", cart);
+                session.setAttribute("cartId", cart.getId());
+                return cart;
+            }
+        }
+
         // Try loading from DB by session ID
         String sessionId = session.getId();
         cart = cartDAO.loadCartBySessionId(sessionId);
@@ -102,9 +113,13 @@ public class CartServlet extends HttpServlet {
             // Create new cart
             cart = new Cart();
             cart.setSessionId(sessionId);
-            // TODO: Set user_id here if authentication is implemented
+            cart.setUserId(userId);
             long newCartId = cartDAO.createCart(cart);
             cart.setId(newCartId);
+        } else if (userId != null && cart.getUserId() == null) {
+            // attach existing session cart to logged-in user
+            cart.setUserId(userId);
+            cartDAO.updateCartOwner(cart.getId(), userId);
         }
         
         session.setAttribute("cart", cart);

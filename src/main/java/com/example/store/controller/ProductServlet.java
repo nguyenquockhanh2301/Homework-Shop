@@ -5,12 +5,14 @@ import com.example.store.model.Product;
 import com.example.store.util.DBConnectionManager;
 import com.example.store.util.CacheManager;
 import com.example.store.util.OptimisticLockException;
+import com.example.store.util.DataIntegrityException;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -26,7 +28,10 @@ import java.util.Optional;
  * - DAO uses ConcurrentHashMap for thread-safe product cache: O(1) lookup by ID.
  */
 @WebServlet(name = "ProductServlet", urlPatterns = {"/products"})
+@jakarta.servlet.annotation.MultipartConfig(maxFileSize = 5 * 1024 * 1024)
 public class ProductServlet extends HttpServlet {
+    private static final String[] ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"};
+    private java.nio.file.Path uploadDir;
     private ProductDAO productDAO;
 
     @Override
@@ -36,6 +41,21 @@ public class ProductServlet extends HttpServlet {
         DBConnectionManager db = new DBConnectionManager("jdbc:mysql://localhost:3306/homework_ds","root","");
         CacheManager cache = new CacheManager();
         productDAO = new ProductDAO(db, cache);
+        String basePath = System.getProperty("user.home") + "/product-uploads";
+        uploadDir = java.nio.file.Paths.get(basePath);
+        try {
+            java.nio.file.Files.createDirectories(uploadDir);
+        } catch (IOException e) {
+            throw new ServletException("Unable to initialize upload directory", e);
+        }
+        getServletContext().setAttribute("uploadDir", uploadDir.toString());
+    }
+
+    private boolean isAdmin(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return false;
+        Object role = session.getAttribute("currentUserRole");
+        return role != null && "ADMIN".equals(role.toString());
     }
 
     @Override
@@ -45,10 +65,13 @@ public class ProductServlet extends HttpServlet {
         if (action == null || action.equals("list")) {
             handleList(req, resp);
         } else if (action.equals("new")) {
+            if (!isAdmin(req)) { resp.sendRedirect(req.getContextPath() + "/products?action=list"); return; }
             handleNew(req, resp);
         } else if (action.equals("edit")) {
+            if (!isAdmin(req)) { resp.sendRedirect(req.getContextPath() + "/products?action=list"); return; }
             handleEdit(req, resp);
         } else if (action.equals("delete")) {
+            if (!isAdmin(req)) { resp.sendRedirect(req.getContextPath() + "/products?action=list"); return; }
             handleDelete(req, resp);
         } else {
             handleList(req, resp);
@@ -58,6 +81,7 @@ public class ProductServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         // handle save
+        if (!isAdmin(req)) { resp.sendRedirect(req.getContextPath() + "/products?action=list"); return; }
         handleSave(req, resp);
     }
 
@@ -106,11 +130,17 @@ public class ProductServlet extends HttpServlet {
      */
     private void handleDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String idParam = req.getParameter("id");
-        if (idParam != null) {
-            int id = Integer.parseInt(idParam);
-            productDAO.delete(id);
+        try {
+            if (idParam != null) {
+                int id = Integer.parseInt(idParam);
+                productDAO.delete(id);
+            }
+            resp.sendRedirect(req.getContextPath() + "/products?action=list");
+        } catch (DataIntegrityException die) {
+            // Show friendly message on list view
+            req.setAttribute("error", die.getMessage());
+            handleList(req, resp);
         }
-        resp.sendRedirect(req.getContextPath() + "/products?action=list");
     }
 
     /**
@@ -122,7 +152,9 @@ public class ProductServlet extends HttpServlet {
         String name = req.getParameter("name");
         String priceParam = req.getParameter("price");
         String description = req.getParameter("description");
+        String imageUrl = req.getParameter("imageUrl");
         String versionParam = req.getParameter("version");
+        jakarta.servlet.http.Part imagePart = req.getPart("imageFile");
 
         Product product = new Product();
         product.setName(name);
@@ -131,13 +163,23 @@ public class ProductServlet extends HttpServlet {
 
         try {
             if (idParam == null || idParam.isEmpty()) {
-                // Create new product
+                if (isValidImagePart(imagePart)) {
+                    product.setImageUrl(storeImage(imagePart));
+                } else {
+                    product.setImageUrl(imageUrl);
+                }
                 productDAO.create(product);
             } else {
-                // Update existing product with optimistic locking
                 int id = Integer.parseInt(idParam);
                 int expectedVersion = Integer.parseInt(versionParam);
+                Optional<Product> existing = productDAO.findById(id);
+                existing.ifPresent(p -> product.setImageUrl(p.getImageUrl()));
                 product.setId(id);
+                if (isValidImagePart(imagePart)) {
+                    product.setImageUrl(storeImage(imagePart));
+                } else if (imageUrl != null && !imageUrl.isBlank()) {
+                    product.setImageUrl(imageUrl);
+                }
                 productDAO.update(product, expectedVersion);
             }
             resp.sendRedirect(req.getContextPath() + "/products?action=list");
@@ -151,5 +193,32 @@ public class ProductServlet extends HttpServlet {
             req.setAttribute("product", product);
             req.getRequestDispatcher("/WEB-INF/views/product-form.jsp").forward(req, resp);
         }
+    }
+
+    private boolean isValidImagePart(jakarta.servlet.http.Part part) {
+        if (part == null || part.getSize() == 0) return false;
+        String type = part.getContentType();
+        for (String allowed : ALLOWED_TYPES) {
+            if (allowed.equalsIgnoreCase(type)) return true;
+        }
+        return false;
+    }
+
+    private String storeImage(jakarta.servlet.http.Part part) throws IOException {
+        String submitted = part.getSubmittedFileName();
+        String safeName = java.nio.file.Paths.get(submitted == null ? "" : submitted).getFileName().toString();
+        String ext = "";
+        int dot = safeName.lastIndexOf('.');
+        if (dot >= 0) ext = safeName.substring(dot);
+        String fileName = java.util.UUID.randomUUID() + ext;
+        java.nio.file.Path target = uploadDir.resolve(fileName);
+        try (java.io.InputStream in = part.getInputStream()) {
+            java.nio.file.Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        return reqPath("/images/" + fileName);
+    }
+
+    private String reqPath(String path) {
+        return path;
     }
 }

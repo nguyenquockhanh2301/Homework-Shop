@@ -199,4 +199,45 @@ public class CartDAO {
             throw new RuntimeException("Error clearing cart", e);
         }
     }
+
+    /**
+     * Load cart by user_id. Returns null if not found.
+     */
+    public Cart loadCartByUserId(Long userId) {
+        String sql = "SELECT id, session_id, user_id, status FROM carts WHERE user_id = ? AND status = 'OPEN'";
+        try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long cartId = rs.getLong("id");
+                    Cart cart = new Cart(cartId);
+                    cart.setSessionId(rs.getString("session_id"));
+                    cart.setUserId(userId);
+                    loadCartItems(cart, conn);
+                    return cart;
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error loading cart by user_id", e);
+        }
+        return null;
+    }
+
+    /**
+     * Update cart owner (user_id) in DB.
+     */
+    public void updateCartOwner(long cartId, Long userId) {
+        String sql = "UPDATE carts SET user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (userId != null) {
+                ps.setLong(1, userId);
+            } else {
+                ps.setNull(1, java.sql.Types.BIGINT);
+            }
+            ps.setLong(2, cartId);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException("Error updating cart owner", e);
+        }
+    }
 }

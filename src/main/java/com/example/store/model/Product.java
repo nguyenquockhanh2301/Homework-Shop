@@ -11,6 +11,7 @@ public class Product {
     private int version;
     private Timestamp createdAt;
     private Timestamp updatedAt;
+    private String imageUrl;
 
     public Product() {}
 
@@ -39,4 +40,7 @@ public class Product {
 
     public Timestamp getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Timestamp updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
 }

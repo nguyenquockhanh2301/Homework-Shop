@@ -4,7 +4,7 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-    <title><c:choose><c:when test="${empty product.id}">Add Product</c:when><c:otherwise>Edit Product</c:otherwise></c:choose></title>
+    <title><c:choose><c:when test="${product.id <= 0}">Add Product</c:when><c:otherwise>Edit Product</c:otherwise></c:choose></title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; max-width: 600px; }
         .form-group { margin-bottom: 15px; }
@@ -19,7 +19,12 @@
     </style>
 </head>
 <body>
-<h1><c:choose><c:when test="${empty product.id}">Add New Product</c:when><c:otherwise>Edit Product #${product.id}</c:otherwise></c:choose></h1>
+<c:if test="${sessionScope.currentUserRole ne 'ADMIN'}">
+    <p class="error">Only admins can manage products.</p>
+    <a href="${pageContext.request.contextPath}/products?action=list" class="btn btn-secondary">Back</a>
+</c:if>
+<c:if test="${sessionScope.currentUserRole eq 'ADMIN'}">
+<h1><c:choose><c:when test="${product.id <= 0}">Add New Product</c:when><c:otherwise>Edit Product #${product.id}</c:otherwise></c:choose></h1>
 
 <c:if test="${not empty error}">
     <div class="error">${error}</div>
@@ -27,7 +32,7 @@
 
 <form method="post" action="${pageContext.request.contextPath}/products">
     <input type="hidden" name="action" value="save" />
-    <c:if test="${not empty product.id}">
+    <c:if test="${product.id > 0}">
         <input type="hidden" name="id" value="${product.id}" />
         <input type="hidden" name="version" value="${product.version}" />
     </c:if>
@@ -48,7 +53,7 @@
         <textarea id="description" name="description">${product.description}</textarea>
     </div>
     
-    <c:if test="${not empty product.version}">
+    <c:if test="${product.id > 0}">
         <div class="info">Version: ${product.version} (optimistic locking enabled)</div>
     </c:if>
     
@@ -57,5 +62,6 @@
         <a href="${pageContext.request.contextPath}/products?action=list" class="btn btn-secondary">Cancel</a>
     </div>
 </form>
+</c:if>
 </body>
 </html>
